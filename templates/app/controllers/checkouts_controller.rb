@@ -44,7 +44,7 @@ class CheckoutsController < CheckoutBaseController
 
   def redirect_on_failure
     flash[:error] = @order.errors.full_messages.join("\n")
-    redirect_to(checkout_state_path(@order.state))
+    redirect_to(edit_checkout_path(state: @order.state))
   end
 
   def transition_forward
@@ -67,7 +67,7 @@ class CheckoutsController < CheckoutBaseController
   end
 
   def send_to_next_state
-    redirect_to checkout_state_path(@order.state)
+    redirect_to edit_checkout_path(state: @order.state)
   end
 
   def update_params
@@ -106,6 +106,7 @@ class CheckoutsController < CheckoutBaseController
   end
 
   def ensure_valid_state
+
     return if skip_state_validation?
     return if @order.has_checkout_step?(params[:state] || @order.state)
 
@@ -121,7 +122,7 @@ class CheckoutsController < CheckoutBaseController
 
     if @order.payments.valid.empty?
       flash.keep
-      redirect_to checkout_state_path("payment")
+      redirect_to edit_checkout_path(state: "payment")
     end
   end
 

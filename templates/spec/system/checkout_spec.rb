@@ -113,7 +113,7 @@ RSpec.describe 'Checkout', :js, type: :system do
         # We need an order reload here to get newly associated addresses.
         # Then we go back to address where we are supposed to be redirected.
         order.reload
-        visit checkout_state_path(:address)
+        visit edit_checkout_path(state: :address)
       end
 
       context "when user has default addresses saved" do
@@ -178,7 +178,7 @@ RSpec.describe 'Checkout', :js, type: :system do
           allow_any_instance_of(OrdersController).to receive_messages(spree_current_user: user)
 
           # Simulate redirect back to address after login
-          visit checkout_state_path(:address)
+          visit edit_checkout_path(state: :address)
         end
 
         context "when does not have saved addresses" do
@@ -228,11 +228,11 @@ RSpec.describe 'Checkout', :js, type: :system do
     end
 
     it "does not allow successful order submission" do
-      visit checkout_path
+      visit edit_checkout_path
       order.payments.first.update state: :void
       check 'Agree to Terms of Service'
       click_button 'Place Order'
-      expect(page).to have_current_path checkout_state_path(:payment)
+      expect(page).to have_current_path edit_checkout_path(state: :payment)
     end
   end
 
@@ -250,6 +250,7 @@ RSpec.describe 'Checkout', :js, type: :system do
       allow_any_instance_of(CheckoutsController).to receive_messages(spree_current_user: user)
     end
 
+
     it "redirects to payment page" do
       visit checkout_state_path(:delivery)
       click_button "Save and Continue"
@@ -261,7 +262,7 @@ RSpec.describe 'Checkout', :js, type: :system do
       check 'Agree to Terms of Service'
       click_button "Place Order"
       expect(page).to have_content("Bogus Gateway: Forced failure")
-      expect(page.current_url).to include("/checkout/payment")
+      expect(page).to have_current_path(edit_checkout_path(state: 'payment'))
     end
   end
 
@@ -284,7 +285,7 @@ RSpec.describe 'Checkout', :js, type: :system do
     end
 
     it "prevents double clicking the payment button on checkout", js: true do
-      visit checkout_state_path(:payment)
+      visit edit_checkout_path(state: :payment)
 
       # prevent form submit to verify button is disabled
       page.execute_script("document.getElementById('checkout_form_payment').onsubmit = function(){return false;}")
@@ -296,7 +297,7 @@ RSpec.describe 'Checkout', :js, type: :system do
 
     it "prevents double clicking the confirm button on checkout", js: true do
       order.payments << create(:payment)
-      visit checkout_state_path(:confirm)
+      visit edit_checkout_path(state: :confirm)
 
       # Test TOS not checked alert
       accept_alert('Please review and accept the Terms of Service') { click_button "Place Order" }
@@ -355,7 +356,9 @@ RSpec.describe 'Checkout', :js, type: :system do
       allow_any_instance_of(CheckoutsController).to receive_messages(current_order: order)
       allow_any_instance_of(CheckoutsController).to receive_messages(spree_current_user: order.user)
 
+
       visit checkout_state_path(:payment)
+
 
       # Starts off with the first payment method being selected
       expect(find_payment_radio(check_payment.id)).to be_checked
@@ -393,7 +396,7 @@ RSpec.describe 'Checkout', :js, type: :system do
       allow_any_instance_of(CheckoutsController).to receive_messages(spree_current_user: user)
       allow_any_instance_of(OrdersController).to receive_messages(spree_current_user: user)
 
-      visit checkout_state_path(:payment)
+      visit edit_checkout_path(state: :payment)
     end
 
     it "selects first source available and customer moves on" do
@@ -433,7 +436,7 @@ RSpec.describe 'Checkout', :js, type: :system do
       fill_in_address
       click_on "Save and Continue"
       click_on "Save and Continue"
-      expect(page).to have_current_path(checkout_state_path("payment"))
+      expect(page).to have_current_path(edit_checkout_path(state: "payment"))
 
       visit products_path
       click_link bag.name
@@ -461,7 +464,7 @@ RSpec.describe 'Checkout', :js, type: :system do
       fill_in_address
       click_on "Save and Continue"
       click_on "Save and Continue"
-      expect(page).to have_current_path(checkout_state_path("payment"))
+      expect(page).to have_current_path(edit_checkout_path(state: "payment"))
     end
 
     context "and updates line item quantity and try to reach payment page" do
@@ -476,12 +479,12 @@ RSpec.describe 'Checkout', :js, type: :system do
       end
 
       it "redirects user back to address step" do
-        visit checkout_state_path("payment")
-        expect(page).to have_current_path(checkout_state_path("address"))
+        visit edit_checkout_path(state: "payment")
+        expect(page).to have_current_path(edit_checkout_path(state: "address"))
       end
 
       it "updates shipments properly through step address -> delivery transitions" do
-        visit checkout_state_path("payment")
+        visit edit_checkout_path(state: "payment")
         click_on "Save and Continue"
         click_on "Save and Continue"
 
@@ -499,12 +502,12 @@ RSpec.describe 'Checkout', :js, type: :system do
       end
 
       it "redirects user back to address step" do
-        visit checkout_state_path("payment")
-        expect(page).to have_current_path(checkout_state_path("address"))
+        visit edit_checkout_path(state: "payment")
+        expect(page).to have_current_path(edit_checkout_path(state: "address"))
       end
 
       it "updates shipments properly through step address -> delivery transitions" do
-        visit checkout_state_path("payment")
+        visit edit_checkout_path(state: "payment")
         click_on "Save and Continue"
         click_on "Save and Continue"
 
@@ -529,7 +532,7 @@ RSpec.describe 'Checkout', :js, type: :system do
       click_on "Save and Continue"
 
       click_on "Save and Continue"
-      expect(page).to have_current_path(checkout_state_path("payment"))
+      expect(page).to have_current_path(edit_checkout_path(state: "payment"))
     end
 
     it "applies them & refreshes the page on user clicking the Apply Code button" do
@@ -552,7 +555,7 @@ RSpec.describe 'Checkout', :js, type: :system do
     context "doesn't fill in coupon code input" do
       it "advances just fine" do
         click_on "Save and Continue"
-        expect(page).to have_current_path(checkout_state_path("confirm"))
+        expect(page).to have_current_path(edit_checkout_path(state: "confirm"))
       end
     end
   end
@@ -579,13 +582,13 @@ RSpec.describe 'Checkout', :js, type: :system do
     end
 
     it "goes right payment step and place order just fine" do
-      expect(page).to have_current_path(checkout_state_path('payment'))
+      expect(page).to have_current_path(edit_checkout_path(state: 'payment'))
 
       choose "Credit Card"
       fill_in_credit_card
       click_button "Save and Continue"
 
-      expect(current_path).to eq checkout_state_path('confirm')
+      expect(page).to have_current_path(edit_checkout_path(state: 'confirm'))
       check 'Agree to Terms of Service'
       click_button "Place Order"
     end
@@ -634,7 +637,7 @@ RSpec.describe 'Checkout', :js, type: :system do
       allow_any_instance_of(OrdersController).to receive_messages(spree_current_user: user)
       allow_any_instance_of(CartLineItemsController).to receive_messages(spree_current_user: user)
 
-      visit checkout_state_path(:delivery)
+      visit edit_checkout_path(state: :delivery)
       click_button "Save and Continue"
       click_button "Save and Continue"
       check 'Agree to Terms of Service'
@@ -665,7 +668,7 @@ RSpec.describe 'Checkout', :js, type: :system do
 
       it "displays the entered state name without evaluating" do
         add_mug_to_cart
-        visit checkout_state_path(:address)
+        visit edit_checkout_path(state: :address)
 
         # Unlike with the other examples in this spec, calling
         # `checkout_as_guest` in this example causes this example to fail
@@ -688,7 +691,7 @@ RSpec.describe 'Checkout', :js, type: :system do
         fill_in "Zip", with: "H0H0H0"
 
         click_on 'Save and Continue'
-        visit checkout_state_path(:address)
+        visit edit_checkout_path(state: :address)
 
         expect(page).to have_field(state_name_css, with: xss_string)
       end
@@ -719,7 +722,7 @@ RSpec.describe 'Checkout', :js, type: :system do
       fill_in_credit_card(number: "1")
       click_on "Save and Continue"
 
-      expect(page).to have_current_path("/checkout/confirm")
+      expect(page).to have_current_path(edit_checkout_path(state: 'confirm'))
     end
 
     it "works with card number 4111111111111111", js: true do
@@ -734,7 +737,7 @@ RSpec.describe 'Checkout', :js, type: :system do
       fill_in_credit_card
       click_on "Save and Continue"
 
-      expect(page).to have_current_path("/checkout/confirm")
+      expect(page).to have_current_path(edit_checkout_path(state: 'confirm'))
     end
   end
 

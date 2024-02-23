@@ -4,12 +4,14 @@
       <%= title %>
     </h3>
 
+
     <%= link_to(
       t('spree.actions.edit'),
       checkout_state_path(:delivery),
       { class: 'order-shipments__edit  underline text-body-md' }
     ) unless @order.completed? %>
   </div>
+
 
   <ul class="order-shipments__info flex flex-col gap-y-2">
     <% order.shipments.each do |shipment| %>
