@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.describe 'setting locale', type: :system do
+  include_context 'featured products'
+  
   let!(:store) { create(:store) }
   def with_locale(locale)
     I18n.locale = locale

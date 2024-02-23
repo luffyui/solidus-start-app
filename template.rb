@@ -6,12 +6,12 @@ with_log = ->(message, &block) {
 }
 
 with_log['checking versions'] do
-  if Rails.gem_version < Gem::Version.new('6.1')
-    say_status :unsupported, shell.set_color(
-      "You are installing solidus_starter_frontend on an outdated Rails version.\n" \
-      "Please keep in mind that some features might not work with it.", :bold
+  if Rails.gem_version < Gem::Version.new('7.0')
+    say_status :error, shell.set_color(
+      "You are trying to install solidus_starter_frontend on an outdated Rails version.\n" \
+      "This installation attempt has been aborted, please retry using at least Rails 7.", :bold
     ), :red
-    exit 1 if auto_accept || no?("Do you wish to proceed?")
+    exit 1
   end
 
   if Gem::Version.new(RUBY_VERSION) < Gem::Version.new('2.7')
@@ -64,10 +64,12 @@ with_log['installing gems'] do
     generate 'solidus:auth:install'
   end
 
+  gem 'responders'
   gem 'canonical-rails'
   gem 'solidus_support'
   gem 'truncate_html'
-  gem 'view_component', '~> 2.46'
+  gem 'view_component', '~> 3.0'
+  gem 'tailwindcss-rails'
 
   gem_group :test do
     # We need to add capybara along with a javascript driver to support the provided system specs.
@@ -76,10 +78,9 @@ with_log['installing gems'] do
     # add them only if they're not already in the Gemfile.
     gem "capybara" unless Bundler.locked_gems.dependencies['capybara']
     gem "selenium-webdriver" unless Bundler.locked_gems.dependencies['selenium-webdriver']
-    gem "webdrivers" unless Bundler.locked_gems.dependencies['webdrivers']
 
     gem 'capybara-screenshot', '~> 1.0'
-    gem 'database_cleaner', '~> 1.7'
+    gem 'database_cleaner', '~> 2.0'
   end
 
   gem_group :development, :test do
@@ -101,9 +102,16 @@ end
 
 with_log['installing files'] do
   directory 'app', 'app', verbose: false
+  directory 'public', 'public'
 
   copy_file 'config/initializers/solidus_auth_devise_unauthorized_redirect.rb'
   copy_file 'config/initializers/canonical_rails.rb'
+  copy_file 'config/routes/storefront.rb'
+  copy_file 'config/tailwind.config.js'
+  create_file 'app/assets/builds/tailwind.css'
+  rake 'tailwindcss:install'
+
+  insert_into_file 'config/environments/test.rb', "\n  config.assets.css_compressor = nil\n", after: 'config.active_support.disallowed_deprecation_warnings = []'
 
   append_file 'config/initializers/devise.rb', <<~RUBY
     Devise.setup do |config|
@@ -115,14 +123,26 @@ with_log['installing files'] do
   application <<~RUBY
     if defined?(FactoryBotRails)
       initializer after: "factory_bot.set_factory_paths" do
-        require 'spree/testing_support'
-        FactoryBot.definition_file_paths = [
-          *Spree::TestingSupport::FactoryBot.definition_file_paths,
-          Rails.root.join('spec/fixtures/factories'),
+        require 'spree/testing_support/factory_bot'
+
+        # The paths for Solidus' core factories.
+        solidus_paths = Spree::TestingSupport::FactoryBot.definition_file_paths
+
+        # Optional: Any factories you want to require from extensions.
+        extension_paths = [
+          # MySolidusExtension::Engine.root.join("lib/my_solidus_extension/testing_support/factories"),
+          # or individually:
+          # MySolidusExtension::Engine.root.join("lib/my_solidus_extension/testing_support/factories/resource.rb"),
         ]
+
+        # Your application's own factories.
+        app_paths = [
+          Rails.root.join('spec/factories'),
+        ]
+
+        FactoryBot.definition_file_paths = solidus_paths + extension_paths + app_paths
       end
     end
-
   RUBY
 
   directory 'spec', verbose: false
@@ -135,72 +155,13 @@ with_log['installing files'] do
 end
 
 with_log['installing routes'] do
+  solidus_mount_point = Pathname(app_path).join('config', 'routes.rb').read[/mount Spree::Core::Engine, at: '([^']*)'/, 1]
+  solidus_mount_point ||= '/'
+
   # The default output is very noisy
   shell.mute do
     route <<~RUBY
-      root to: 'home#index'
-
-      devise_for(:user, {
-        class_name: 'Spree::User',
-        singular: :spree_user,
-        controllers: {
-          sessions: 'user_sessions',
-          registrations: 'user_registrations',
-          passwords: 'user_passwords',
-          confirmations: 'user_confirmations'
-        },
-        skip: [:unlocks, :omniauth_callbacks],
-        path_names: { sign_out: 'logout' }
-      })
-
-      resources :users, only: [:edit, :update]
-
-      devise_scope :spree_user do
-        get '/login', to: 'user_sessions#new', as: :login
-        post '/login', to: 'user_sessions#create', as: :create_new_session
-        match '/logout', to: 'user_sessions#destroy', as: :logout, via: Devise.sign_out_via
-        get '/signup', to: 'user_registrations#new', as: :signup
-        post '/signup', to: 'user_registrations#create', as: :registration
-        get '/password/recover', to: 'user_passwords#new', as: :recover_password
-        post '/password/recover', to: 'user_passwords#create', as: :reset_password
-        get '/password/change', to: 'user_passwords#edit', as: :edit_password
-        put '/password/change', to: 'user_passwords#update', as: :update_password
-        get '/confirm', to: 'user_confirmations#show', as: :confirmation if Spree::Auth::Config[:confirmable]
-      end
-
-      resource :account, controller: 'users'
-
-      resources :products, only: [:index, :show]
-
-      resources :cart_line_items, only: :create
-
-      get '/locale/set', to: 'locale#set'
-      post '/locale/set', to: 'locale#set', as: :select_locale
-
-      resource :checkout_session, only: :new
-      resource :checkout_guest_session, only: :create
-
-      # non-restful checkout stuff
-      patch '/checkout/update/:state', to: 'checkouts#update', as: :update_checkout
-      get '/checkout/:state', to: 'checkouts#edit', as: :checkout_state
-      get '/checkout', to: 'checkouts#edit', as: :checkout
-
-      get '/orders/:id/token/:token' => 'orders#show', as: :token_order
-
-      resources :orders, only: :show do
-        resources :coupon_codes, only: :create
-      end
-
-      resource :cart, only: [:edit, :update] do
-        put 'empty'
-      end
-
-      # route globbing for pretty nested taxon and product paths
-      get '/t/*id', to: 'taxons#show', as: :nested_taxons
-
-      get '/unauthorized', to: 'home#unauthorized', as: :unauthorized
-      get '/cart_link', to: 'store#cart_link', as: :cart_link
-
+      scope(path: '#{solidus_mount_point}') { draw :storefront }
     RUBY
   end
 
@@ -218,6 +179,7 @@ end
 
 with_log['patching asset files'] do
   append_file 'config/initializers/assets.rb', "Rails.application.config.assets.precompile += ['solidus_starter_frontend_manifest.js']"
+  append_file 'config/initializers/assets.rb', "\nRails.application.config.assets.paths << Rails.root.join('app', 'assets', 'stylesheets', 'fonts')"
   gsub_file 'app/assets/stylesheets/application.css', '*= require_tree', '* OFF require_tree'
 end
 

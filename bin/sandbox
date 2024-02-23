@@ -15,7 +15,8 @@ replace_in_database_yml() {
 
 # Stay away from the bundler env of the containing extension.
 function unbundled {
-  ruby -rbundler -e'b = proc {system *ARGV}; Bundler.respond_to?(:with_unbundled_env) ? Bundler.with_unbundled_env(&b) : Bundler.with_clean_env(&b)' -- "$@"
+  set +x
+  ruby -rbundler -e'Bundler.with_unbundled_env { system *ARGV }' -- "$@"
 }
 
 # "sqlite" is set by the ORB extension instead of "sqlite3",
@@ -39,14 +40,20 @@ fi
 
 cd ./sandbox
 
+# Coverage
+echo "require_relative '../../coverage.rb' if ENV['COVERAGE']" >> config/boot.rb
+echo "gem 'rspec_junit_formatter', require: false" >> Gemfile
+echo "gem 'simplecov', '~> 0.22', require: false" >> Gemfile
+echo "gem 'simplecov-cobertura', require: false" >> Gemfile
+unbundled bundle install
+
 test -n "${host}" && replace_in_database_yml "host" "${host}"
 test -n "${username}" && replace_in_database_yml "username" "${username}"
 test -n "${password}" && replace_in_database_yml "password" "${password}"
-test -n "${SANDBOX_BUNDLE_PATH}" && bundle config --local path "${SANDBOX_BUNDLE_PATH}"
 
 unbundled bundle add solidus \
   --github "${SOLIDUS_REPO:-solidusio/solidus}" \
-  --branch "${SOLIDUS_BRANCH:-master}" \
+  --branch "${SOLIDUS_BRANCH:-main}" \
   --version '> 0.a'
 
 unbundled bundle exec rake db:drop db:create
@@ -55,6 +62,6 @@ export FRONTEND="$PWD/../template.rb"
 unbundled bundle exec rails generate solidus:install --auto-accept "$@"
 
 echo
-echo "🚀 Sandbox app successfully created for ${extension_name}!"
+echo "🚀 Sandbox app successfully created for the starter frontend!"
 echo "🚀 Use 'export DB=[postgres|mysql|sqlite3]' to control the DB adapter"
 echo "🚀 This app is intended for test purposes."

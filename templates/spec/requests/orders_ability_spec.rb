@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.describe 'Order permissions', type: :request do
   let(:order) { create(:order, user: nil, store: store) }
@@ -43,9 +43,9 @@ RSpec.describe 'Order permissions', type: :request do
 
       context 'when no token present' do
         it 'responds with 404' do
-          expect do
-            get order_path(id: 'R123')
-          end.to raise_error(ActiveRecord::RecordNotFound)
+          get order_path(id: 'R123')
+
+          expect(response.status).to eq(404)
         end
       end
     end

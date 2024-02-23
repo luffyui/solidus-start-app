@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.describe 'Cart permissions', type: :request do
   let(:order) { create(:order, user: nil, store: store) }
@@ -12,7 +12,7 @@ RSpec.describe 'Cart permissions', type: :request do
 
     context '#edit' do
       it 'checks if user is authorized for :read' do
-        get edit_cart_path
+        get cart_path
         expect(response).to redirect_to(login_path)
       end
     end

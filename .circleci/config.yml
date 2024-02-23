@@ -1,7 +1,9 @@
 version: 2.1
 
 orbs:
-  browser-tools: circleci/browser-tools@1.4.1
+
+  browser-tools: circleci/browser-tools@1.4.6
+  codecov: codecov/codecov@3.2.4
 
   # Always take the latest version of the orb, this allows us to
   # run specs against Solidus supported versions only without the need
@@ -9,8 +11,11 @@ orbs:
   # or goes EOL.
   solidusio_extensions: solidusio/extensions@volatile
 
-commands:
-  setup:
+jobs:
+  run-specs:
+    executor:
+        name: solidusio_extensions/<<parameters.database>>
+        ruby_version: <<parameters.ruby_version>>
     steps:
       - checkout
       - browser-tools/install-chrome
@@ -20,22 +25,6 @@ commands:
           command: |
             sudo apt-get update
             sudo apt-get install -yq libvips-dev
-
-  test-branch:
-    description:
-      Runs tests for a specific Solidus branch.
-
-    parameters:
-      solidus_branch:
-        type: string
-      rails_version:
-        type: string
-      ruby_version:
-        type: string
-      database:
-        type: string
-
-    steps:
       - run:
           name: 'Solidus <<parameters.solidus_branch>>:  Install gems'
           command: |
@@ -46,7 +35,10 @@ commands:
           when: always
       - run:
           name: 'Solidus <<parameters.solidus_branch>>:  Install sandbox with generated starter frontend'
-          command: bin/sandbox --seed=false --sample=false
+
+          command: |
+            <<#parameters.coverage>>export COVERAGE=true<</parameters.coverage>>
+            bin/sandbox --seed=false --sample=false
           environment:
             RAILS_ENV: development # if run in test mode will attempt to eager-load and break the sandbox
             RAILS_VERSION: <<parameters.rails_version>>
@@ -57,40 +49,44 @@ commands:
           command: |
             cd sandbox
             bundle add rspec_junit_formatter --group test
+
+            <<#parameters.coverage>>export COVERAGE=true<</parameters.coverage>>
             bundle exec rspec --format progress --format RspecJunitFormatter --out ../test-results/results.xml
           environment:
             RAILS_VERSION: <<parameters.rails_version>>
             SOLIDUS_BRANCH: <<parameters.solidus_branch>>
           when: always
+      - when:
+          condition: <<parameters.coverage>>
+          steps: ["codecov/upload"]
+          path: test-results
+      - store_artifacts:
+          path: /home/circleci/project/sandbox/tmp/capybara/
+          destination: capybara
+      - store_artifacts:
+          path: /home/circleci/project/coverage/
+          destination: coverage
       - run:
           command: rm -rf sandbox
           name: 'Solidus <<parameters.solidus_branch>>: Clean up'
           when: always
-
-jobs:
-  run-specs:
-    executor:
-        name: solidusio_extensions/<<parameters.database>>
-        ruby_version: <<parameters.ruby_version>>
-    steps:
-      - setup
-      - test-branch:
-          solidus_branch: <<parameters.solidus_branch>>
-          rails_version: <<parameters.rails_version>>
-          ruby_version: <<parameters.ruby_version>>
-          database: <<parameters.database>>
       - solidusio_extensions/store-test-results
     parameters:
       solidus_branch:
         type: string
-        default: 'v3.3'
+        default: 'main'
       rails_version:
         type: string
-        default: '~> 7.0'
+        default: '~> 7.1.0'
       ruby_version:
         type: string
       database:
         type: string
+
+
+      coverage:
+        type: boolean
+        default: false
 
 workflows:
   "Run specs on development Solidus version":
@@ -105,12 +101,14 @@ workflows:
           database: 'postgres'
           ruby_version: '3.1'
 
+
       - run-specs:
           name: run-specs-with-postgres-ruby-3-0
           database: 'postgres'
-          ruby_version: '2.7'
+          ruby_version: '3.0'
 
       - run-specs:
+
           name: run-specs-with-mysql-ruby-3-2
           database: 'mysql'
           ruby_version: '3.2'
@@ -119,3 +117,6 @@ workflows:
           name: run-specs-with-sqlite-ruby-3-2
           database: 'sqlite'
           ruby_version: '3.2'
+
+          coverage: true
+
