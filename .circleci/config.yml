@@ -1,6 +1,7 @@
 version: 2.1
 
 orbs:
+
   browser-tools: circleci/browser-tools@1.4.6
   codecov: codecov/codecov@3.2.4
 
@@ -34,6 +35,7 @@ jobs:
           when: always
       - run:
           name: 'Solidus <<parameters.solidus_branch>>:  Install sandbox with generated starter frontend'
+
           command: |
             <<#parameters.coverage>>export COVERAGE=true<</parameters.coverage>>
             bin/sandbox --seed=false --sample=false
@@ -47,6 +49,7 @@ jobs:
           command: |
             cd sandbox
             bundle add rspec_junit_formatter --group test
+
             <<#parameters.coverage>>export COVERAGE=true<</parameters.coverage>>
             bundle exec rspec --format progress --format RspecJunitFormatter --out ../test-results/results.xml
           environment:
@@ -68,7 +71,6 @@ jobs:
           name: 'Solidus <<parameters.solidus_branch>>: Clean up'
           when: always
       - solidusio_extensions/store-test-results
-
     parameters:
       solidus_branch:
         type: string
@@ -80,6 +82,8 @@ jobs:
         type: string
       database:
         type: string
+
+
       coverage:
         type: boolean
         default: false
@@ -97,12 +101,14 @@ workflows:
           database: 'postgres'
           ruby_version: '3.1'
 
+
       - run-specs:
           name: run-specs-with-postgres-ruby-3-0
           database: 'postgres'
           ruby_version: '3.0'
 
       - run-specs:
+
           name: run-specs-with-mysql-ruby-3-2
           database: 'mysql'
           ruby_version: '3.2'
@@ -111,4 +117,6 @@ workflows:
           name: run-specs-with-sqlite-ruby-3-2
           database: 'sqlite'
           ruby_version: '3.2'
+
           coverage: true
+
