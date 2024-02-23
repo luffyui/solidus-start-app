@@ -27,5 +27,6 @@ module CheckoutHelper
       content_tag('li', content_tag('span', text), class: css_classes.join('-'))
     end
     content_tag('ol', raw(items.join("\n")), class: 'progress-steps', id: "checkout-step-#{@order.state}")
+
   end
 end

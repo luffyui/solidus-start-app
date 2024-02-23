@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.describe 'Checkout confirm page submission', :js, type: :system do
   include_context 'checkout setup'
@@ -32,7 +32,7 @@ RSpec.describe 'Checkout confirm page submission', :js, type: :system do
           check 'Agree to Terms of Service'
           click_button "Place Order"
           expect(page).to have_content "#{order_product.name} became unavailable"
-          expect(page).to have_current_path edit_cart_path
+          expect(page).to have_current_path cart_path
         end
       end
     end

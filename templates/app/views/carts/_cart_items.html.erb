@@ -9,14 +9,7 @@
   )
 %>
 
-<section class="cart-items">
-  <div class="cart-items-header">
-    <h2 class="cart-items-header__title">Item</h2>
-    <h2 class="cart-items-header__title">Price</h2>
-    <h2 class="cart-items-header__title">Quantity</h2>
-    <h2 class="cart-items-header__title">Subtotal</h2>
-  </div>
-
+<section class="flex flex-col">
   <%= render(
     partial: 'carts/cart_item',
     collection: order.line_items,
@@ -24,7 +17,7 @@
     locals: { order_form: order_form }
   ) %>
 
-  <% if is_order_empty %>
-    <%= render 'carts/cart_adjustments' %>
-  <% end %>
+  <%# if is_order_empty %>
+    <%#= render 'carts/cart_adjustments' %>
+  <%# end %>
 </section>

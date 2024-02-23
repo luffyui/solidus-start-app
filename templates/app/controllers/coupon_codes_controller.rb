@@ -9,9 +9,9 @@ class CouponCodesController < StoreController
 
     if params[:coupon_code].present?
       @order.coupon_code = params[:coupon_code]
-      handler = Spree::PromotionHandler::Coupon.new(@order).apply
+      handler = Spree::Config.coupon_code_handler_class.new(@order).apply
 
-      respond_with(@order) do |format|
+      respond_to do |format|
         format.html do
           if handler.successful?
             flash[:success] = handler.success
@@ -19,7 +19,7 @@ class CouponCodesController < StoreController
             flash[:error] = handler.error
           end
 
-          redirect_back fallback_location: edit_cart_path
+          redirect_back fallback_location: cart_path
         end
       end
     end

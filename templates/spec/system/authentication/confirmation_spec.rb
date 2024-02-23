@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.feature 'Confirmation', type: :system do
+  include_context "featured products"
+
   before do
     allow(Spree::UserMailer).to receive(:confirmation_instructions)
       .and_return(double(deliver: true))

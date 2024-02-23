@@ -8,6 +8,10 @@ class ProductsController < StoreController
 
   respond_to :html
 
+  rescue_from Spree::Config.searcher_class::InvalidOptions do |error|
+    raise ActionController::BadRequest.new, error.message
+  end
+
   def index
     @searcher = build_searcher(params.merge(include_images: true))
     @products = @searcher.retrieve_products
@@ -22,6 +26,7 @@ class ProductsController < StoreController
 
     @product_properties = @product.product_properties.includes(:property)
     @taxon = Spree::Taxon.find(params[:taxon_id]) if params[:taxon_id]
+    @similar_products = @product.similar_products
   end
 
   private

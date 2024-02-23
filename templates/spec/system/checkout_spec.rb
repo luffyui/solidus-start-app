@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
-RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
-  include SystemHelpers
+RSpec.describe 'Checkout', :js, type: :system do
+  include  SolidusStarterFrontend::System::CheckoutHelpers
 
   include_context 'checkout setup'
 
@@ -19,7 +19,7 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
         click_button "Checkout"
       end
 
-      it 'should default checkbox to checked', js: true, inaccessible: true do
+      it 'should default checkbox to checked', js: true do
         expect(find('input#order_use_billing')).to be_checked
       end
 
@@ -250,8 +250,9 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
       allow_any_instance_of(CheckoutsController).to receive_messages(spree_current_user: user)
     end
 
-    it "redirects to payment page", inaccessible: true do
-      visit edit_checkout_path(state: :delivery)
+
+    it "redirects to payment page" do
+      visit checkout_state_path(:delivery)
       click_button "Save and Continue"
       choose "Credit Card"
       fill_in "Card Number", with: '123'
@@ -311,37 +312,69 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
     end
   end
 
-  context "when several payment methods are available" do
-    let(:credit_cart_payment) { create(:credit_card_payment_method) }
-    let(:check_payment) { create(:check_payment_method) }
+  context "when the order is fully covered by store credit" do
+    before do
+      create(:store_credit_payment_method)
+      credit_card_payment_method = create(:credit_card_payment_method)
+      check_payment_method = create(:check_payment_method)
 
-    after do
-      Capybara.ignore_hidden_elements = true
+      user = create(:user)
+      create(:store_credit, user: user)
+      order = Spree::TestingSupport::OrderWalkthrough.up_to(:payment, user: user)
+
+      allow(order).to receive_messages(available_payment_methods: [check_payment_method, credit_card_payment_method])
+      allow_any_instance_of(CheckoutsController).to receive_messages(current_order: order)
+      allow_any_instance_of(CheckoutsController).to receive_messages(spree_current_user: order.user)
     end
 
-    before do
-      Capybara.ignore_hidden_elements = false
+    it "allows the user to complete checkout using only store credit as the payment source" do
+      visit checkout_state_path(:payment)
+
+      expect(page).to have_content("Your order is fully covered by store credits, no additional payment method is required.")
+      expect(page).not_to match(/\bCheck\b/)
+      expect(page).not_to match(/\bCredit Card\b/)
+
+      click_button "Save and Continue"
+      expect(page).to have_content("Confirm")
+
+      check "Agree to Terms of Service"
+      click_on "Place Order"
+      expect(page).to have_content(I18n.t('spree.order_processed_successfully'))
+    end
+  end
+
+  context "when several payment methods are available" do
+    let(:credit_card_payment) { create(:credit_card_payment_method) }
+    let(:check_payment) { create(:check_payment_method) }
+
+    it "disables the details of other payment methods", js: true do
       order = Spree::TestingSupport::OrderWalkthrough.up_to(:delivery)
-      allow(order).to receive_messages(available_payment_methods: [check_payment, credit_cart_payment])
+      allow(order).to receive_messages(available_payment_methods: [check_payment, credit_card_payment])
       order.user = create(:user)
       order.recalculate
 
       allow_any_instance_of(CheckoutsController).to receive_messages(current_order: order)
       allow_any_instance_of(CheckoutsController).to receive_messages(spree_current_user: order.user)
 
-      visit edit_checkout_path(state: :payment)
-    end
 
-    it "the first payment method should be selected", js: true do
-      payment_method_css = "#order_payments_attributes__payment_method_id_"
-      expect(find("#{payment_method_css}#{check_payment.id}")).to be_checked
-      expect(find("#{payment_method_css}#{credit_cart_payment.id}")).not_to be_checked
-    end
+      visit checkout_state_path(:payment)
 
-    it "the fields for the other payment methods should be hidden", js: true do
-      payment_method_css = "#payment_method_"
-      expect(find("#{payment_method_css}#{check_payment.id}")).to be_visible
-      expect(find("#{payment_method_css}#{credit_cart_payment.id}")).not_to be_visible
+
+      # Starts off with the first payment method being selected
+      expect(find_payment_radio(check_payment.id)).to be_checked
+      expect(find_payment_fieldset(check_payment.id)).not_to be_disabled
+
+      expect(find_payment_radio(credit_card_payment.id)).not_to be_checked
+      expect(find_payment_fieldset(credit_card_payment.id)).to be_disabled
+
+      # Select the credit card
+      find_payment_radio(credit_card_payment.id).click
+
+      expect(find_payment_radio(check_payment.id)).not_to be_checked
+      expect(find_payment_fieldset(check_payment.id)).to be_disabled
+
+      expect(find_payment_radio(credit_card_payment.id)).to be_checked
+      expect(find_payment_fieldset(credit_card_payment.id)).not_to be_disabled
     end
   end
 
@@ -354,8 +387,9 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
       create(:credit_card, user_id: user.id, payment_method: bogus, gateway_customer_profile_id: "BGS-WEFWF")
     end
 
+    let!(:wallet_source) { user.wallet.add(credit_card) }
+
     before do
-      user.wallet.add(credit_card)
       order = Spree::TestingSupport::OrderWalkthrough.up_to(:delivery, user: user)
 
       allow_any_instance_of(CheckoutsController).to receive_messages(current_order: order)
@@ -366,7 +400,7 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
     end
 
     it "selects first source available and customer moves on" do
-      expect(find("#use_existing_card_yes")).to be_checked
+      expect(find_existing_payment_radio(wallet_source.id)).to be_checked
 
       click_on "Save and Continue"
       check 'Agree to Terms of Service'
@@ -378,7 +412,7 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
     end
 
     it "allows user to enter a new source" do
-      choose "use_existing_card_no"
+      find_payment_radio(bogus.id).click
       fill_in_credit_card
 
       click_on "Save and Continue"
@@ -393,7 +427,6 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
 
   # regression for https://github.com/spree/spree/issues/2921
   context "goes back from payment to add another item", js: true do
-    let!(:store) { FactoryBot.create(:store) }
     let!(:bag) { create(:product, name: "RoR Bag") }
 
     it "transit nicely through checkout steps again" do
@@ -405,7 +438,7 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
       click_on "Save and Continue"
       expect(page).to have_current_path(edit_checkout_path(state: "payment"))
 
-      visit root_path
+      visit products_path
       click_link bag.name
       click_button "add-to-cart-button"
 
@@ -436,9 +469,10 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
 
     context "and updates line item quantity and try to reach payment page" do
       before do
-        visit edit_cart_path
+        stock_location.stock_items.update_all(count_on_hand: 5)
+        visit cart_path
         within '.cart-item__quantity' do
-          fill_in first("input")["name"], with: 3
+          select 3, from: "order_line_items_attributes_0_quantity"
         end
 
         click_on "Update"
@@ -462,7 +496,7 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
       let!(:bag) { create(:product, name: "RoR Bag") }
 
       before do
-        visit root_path
+        visit products_path
         click_link bag.name
         click_button "add-to-cart-button"
       end
@@ -648,7 +682,7 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
         end
 
         fill_in_address
-        fill_in 'Customer E-Mail', with: 'test@example.com'
+        fill_in 'Customer email', with: 'test@example.com'
 
         state_name_css = "order_bill_address_attributes_state_name"
 
@@ -726,7 +760,7 @@ RSpec.describe 'Checkout', :js, type: :system, inaccessible: true do
   end
 
   def add_mug_to_cart
-    visit root_path
+    visit products_path
     click_link mug.name
     click_button "add-to-cart-button"
   end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.describe 'Checkouts', type: :request, with_signed_in_user: true do
   let(:user) { order.user }
@@ -25,21 +25,21 @@ RSpec.describe 'Checkouts', type: :request, with_signed_in_user: true do
       order.line_items.destroy_all
       get edit_checkout_path, params: { state: "delivery" }
 
-      expect(response).to redirect_to(edit_cart_path)
+      expect(response).to redirect_to(cart_path)
     end
 
     it "redirects to the cart path if current_order is nil" do
       order.destroy
       get edit_checkout_path, params: { state: "delivery" }
 
-      expect(response).to redirect_to(edit_cart_path)
+      expect(response).to redirect_to(cart_path)
     end
 
     it "redirects to cart if order is completed" do
       order.touch(:completed_at)
       get edit_checkout_path, params: { state: "address" }
 
-      expect(response).to redirect_to(edit_cart_path)
+      expect(response).to redirect_to(cart_path)
     end
 
     # Regression test for https://github.com/spree/spree/issues/2280
@@ -230,10 +230,10 @@ RSpec.describe 'Checkouts', type: :request, with_signed_in_user: true do
           before { payment_method.update!(available_to_users: false) }
 
           it 'sets the payment amount' do
-            expect do
-              patch checkout_path(params)
-            end.to raise_error(ActiveRecord::RecordNotFound)
+            patch update_checkout_path(params)
 
+
+            expect(response.status).to eq(404)
             expect(order.state).to eq('payment')
             expect(order.payments).to be_empty
           end
@@ -303,8 +303,10 @@ RSpec.describe 'Checkouts', type: :request, with_signed_in_user: true do
 
       it "renders the edit template" do
         order.line_items.destroy_all
-        patch checkout_path(state: "address", order: { bill_address_attributes: address_params })
-        expect(response).to redirect_to(edit_cart_path)
+
+        patch update_checkout_path(state: "address", order: { bill_address_attributes: address_params })
+        expect(response).to redirect_to(cart_path)
+
       end
     end
 
@@ -312,9 +314,11 @@ RSpec.describe 'Checkouts', type: :request, with_signed_in_user: true do
       let(:user) { create(:user) }
       let(:order) { create(:order_with_line_items, guest_token: nil, user_id: nil) }
 
-      it "redirects to the edit_cart_path" do
-        patch checkout_path(state: "confirm")
-        expect(response).to redirect_to edit_cart_path
+
+      it "redirects to the cart_path" do
+        patch update_checkout_path(state: "confirm")
+        expect(response).to redirect_to cart_path
+
       end
     end
 
@@ -393,7 +397,7 @@ RSpec.describe 'Checkouts', type: :request, with_signed_in_user: true do
         it "redirects the customer to the cart page with an error message" do
           patch checkout_path(state: "address", order: { bill_address_attributes: address_params })
           expect(flash[:error]).to eq(I18n.t('spree.insufficient_stock_for_order'))
-          expect(response).to redirect_to(edit_cart_path)
+          expect(response).to redirect_to(cart_path)
         end
       end
 
@@ -434,7 +438,7 @@ RSpec.describe 'Checkouts', type: :request, with_signed_in_user: true do
       end
 
       it "redirects to cart" do
-        expect(response).to redirect_to edit_cart_path
+        expect(response).to redirect_to cart_path
       end
 
       it "redirects set flash message for no inventory" do
