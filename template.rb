@@ -21,12 +21,12 @@ bundle_command = ->(command) do
 end
 
 with_log['checking versions'] do
-  if Rails.gem_version < Gem::Version.new('6.1')
-    say_status :unsupported, shell.set_color(
-      "You are installing solidus_starter_frontend on an outdated Rails version.\n" \
-      "Please keep in mind that some features might not work with it.", :bold
+  if Rails.gem_version < Gem::Version.new('7.0')
+    say_status :error, shell.set_color(
+      "You are trying to install solidus_starter_frontend on an outdated Rails version.\n" \
+      "This installation attempt has been aborted, please retry using at least Rails 7.", :bold
     ), :red
-    exit 1 if auto_accept || no?("Do you wish to proceed?")
+    exit 1
   end
 
   if Gem::Version.new(RUBY_VERSION) < Gem::Version.new('2.7')
@@ -74,19 +74,36 @@ with_log['fetching remote templates'] do
 end
 
 with_log['installing gems'] do
+
+  unless Bundler.locked_gems.dependencies['solidus_auth_devise']
+    bundle_command 'add solidus_auth_devise'
+    generate 'solidus:auth:install'
+  end
+
+  gem 'responders'
   gem 'canonical-rails'
   gem 'solidus_support'
   gem 'truncate_html'
-  gem 'view_component', '~> 2.46'
+  gem 'view_component', '~> 3.0'
+  gem 'tailwindcss-rails'
+
+  gem_group :test do
+    # We need to add capybara along with a javascript driver to support the provided system specs.
+    # `rails new` will add the following gems for system tests unless `--skip-test` is provided.
+    # We want to stick with them but we can't be sure about how the app was generated, so we'll
+    # add them only if they're not already in the Gemfile.
+    gem "capybara" unless Bundler.locked_gems.dependencies['capybara']
+    gem "selenium-webdriver" unless Bundler.locked_gems.dependencies['selenium-webdriver']
+
+    gem 'capybara-screenshot', '~> 1.0'
+    gem 'database_cleaner', '~> 2.0'
+  end
 
   gem_group :development, :test do
     gem 'rspec-rails'
-    gem 'apparition', '~> 0.6.0', github: 'twalpole/apparition'
     gem 'rails-controller-testing', '~> 1.0.5'
     gem 'rspec-activemodel-mocks', '~> 1.1.0'
 
-    gem 'capybara-screenshot', '~> 1.0'
-    gem 'database_cleaner', '~> 1.7'
     gem 'factory_bot', '>= 4.8'
     gem 'factory_bot_rails'
     gem 'ffaker', '~> 2.13'
@@ -116,10 +133,17 @@ with_log['installing gems'] do
 end
 
 with_log['installing files'] do
-  directory 'app', 'app'
+  directory 'app', 'app', verbose: false
+  directory 'public', 'public'
 
   copy_file 'config/initializers/solidus_auth_devise_unauthorized_redirect.rb'
   copy_file 'config/initializers/canonical_rails.rb'
+  copy_file 'config/routes/storefront.rb'
+  copy_file 'config/tailwind.config.js'
+  create_file 'app/assets/builds/tailwind.css'
+  rake 'tailwindcss:install'
+
+  insert_into_file 'config/environments/test.rb', "\n  config.assets.css_compressor = nil\n", after: 'config.active_support.disallowed_deprecation_warnings = []'
 
   append_file 'config/initializers/devise.rb', <<~RUBY
     Devise.setup do |config|
@@ -131,26 +155,39 @@ with_log['installing files'] do
   application <<~RUBY
     if defined?(FactoryBotRails)
       initializer after: "factory_bot.set_factory_paths" do
-        require 'spree/testing_support'
-        FactoryBot.definition_file_paths = [
-          *Spree::TestingSupport::FactoryBot.definition_file_paths,
-          Rails.root.join('spec/fixtures/factories'),
+        require 'spree/testing_support/factory_bot'
+
+        # The paths for Solidus' core factories.
+        solidus_paths = Spree::TestingSupport::FactoryBot.definition_file_paths
+
+        # Optional: Any factories you want to require from extensions.
+        extension_paths = [
+          # MySolidusExtension::Engine.root.join("lib/my_solidus_extension/testing_support/factories"),
+          # or individually:
+          # MySolidusExtension::Engine.root.join("lib/my_solidus_extension/testing_support/factories/resource.rb"),
         ]
+
+        # Your application's own factories.
+        app_paths = [
+          Rails.root.join('spec/factories'),
+        ]
+
+        FactoryBot.definition_file_paths = solidus_paths + extension_paths + app_paths
       end
     end
-
   RUBY
 
-  directory 'spec'
+  directory 'spec', verbose: false
 
   # In CI, the Rails environment is test. In that Rails environment,
   # `Solidus::InstallGenerator#setup_assets` adds `solidus_frontend` assets to
   # vendor. We'd want to forcefully replace those `solidus_frontend` assets with
   # SolidusStarterFrontend assets in CI.
-  directory 'vendor', force: Rails.env.test?
+  directory 'vendor', verbose: false, force: Rails.env.test?
 end
 
 with_log['installing routes'] do
+
   route <<~RUBY
     root to: 'home#index'
 
@@ -194,10 +231,7 @@ with_log['installing routes'] do
     resource :checkout_session, only: :new
     resource :checkout_guest_session, only: :create
 
-    # non-restful checkout stuff
-    patch '/checkout/update/:state', to: 'checkouts#update', as: :update_checkout
-    get '/checkout/:state', to: 'checkouts#edit', as: :checkout_state
-    get '/checkout', to: 'checkouts#edit', as: :checkout
+    resource :checkout, only: [:edit, :update]
 
     get '/orders/:id/token/:token' => 'orders#show', as: :token_order
 
@@ -231,6 +265,7 @@ end
 
 with_log['patching asset files'] do
   append_file 'config/initializers/assets.rb', "Rails.application.config.assets.precompile += ['solidus_starter_frontend_manifest.js']"
+  append_file 'config/initializers/assets.rb', "\nRails.application.config.assets.paths << Rails.root.join('app', 'assets', 'stylesheets', 'fonts')"
   gsub_file 'app/assets/stylesheets/application.css', '*= require_tree', '* OFF require_tree'
 end
 
@@ -240,7 +275,7 @@ end
 
 with_log['security advisory'] do
   message = <<~TEXT
-    RECOMMENDED: To receive security announcements concerning Solidus Starter
+    To receive security announcements concerning Solidus Starter
     Frontend, please subscribe to the Solidus Security mailing list
     (https://groups.google.com/forum/#!forum/solidus-security). The mailing
     list is very low traffic, and it receives the public notifications the
@@ -248,5 +283,5 @@ with_log['security advisory'] do
     out https://solidus.io/security.
   TEXT
 
-  print_wrapped set_color(message.gsub("\n", ' '), :yellow)
+  say_status :RECOMMENDED, set_color(message.gsub("\n", ' '), :yellow), :yellow
 end

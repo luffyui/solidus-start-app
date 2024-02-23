@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.describe 'Cart', type: :request do
   let!(:store) { create(:store) }
@@ -11,7 +11,7 @@ RSpec.describe 'Cart', type: :request do
       let(:order) { create(:order, user: nil, store: store) }
 
       it 'renders the cart' do
-        get edit_cart_path
+        get cart_path
 
         expect(flash[:error]).to be_nil
         expect(response).to be_ok
@@ -22,7 +22,7 @@ RSpec.describe 'Cart', type: :request do
       let(:user) { create(:user) }
 
       it "builds a new valid order with complete meta-data" do
-        get edit_cart_path
+        get cart_path
 
         order = assigns[:order]
 
@@ -45,12 +45,12 @@ RSpec.describe 'Cart', type: :request do
         # email validation is only after address state
         order.update_column(:state, "delivery")
         patch cart_path, params: { order: { email: "" } }
-        expect(response).to render_template :edit
+        expect(response).to render_template :show
       end
 
       it "redirects to cart path (on success)" do
         patch cart_path, params: { order: { email: 'test@email.com' } }
-        expect(response).to redirect_to(edit_cart_path)
+        expect(response).to redirect_to(cart_path)
       end
 
       it "advances the order if :checkout button is pressed" do
@@ -58,7 +58,7 @@ RSpec.describe 'Cart', type: :request do
           patch cart_path, params: { checkout: true }
         end.to change { order.reload.state }.from('cart').to('address')
 
-        expect(response).to redirect_to checkout_state_path('address')
+        expect(response).to redirect_to edit_checkout_path(state: 'address')
       end
     end
   end
@@ -69,7 +69,7 @@ RSpec.describe 'Cart', type: :request do
     it "destroys line items in the current order" do
       put empty_cart_path
 
-      expect(response).to redirect_to(edit_cart_path)
+      expect(response).to redirect_to(cart_path)
       expect(order.reload.line_items).to be_blank
     end
   end

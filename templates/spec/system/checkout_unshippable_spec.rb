@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
-RSpec.describe 'checkout with unshippable items', type: :system, inaccessible: true do
+RSpec.describe 'checkout with unshippable items', type: :system do
   let!(:stock_location) { create(:stock_location) }
   let(:order) { Spree::TestingSupport::OrderWalkthrough.up_to(:address) }
 
@@ -26,7 +26,7 @@ RSpec.describe 'checkout with unshippable items', type: :system, inaccessible: t
   end
 
   it 'displays and removes' do
-    visit checkout_state_path(:delivery)
+    visit edit_checkout_path(state: :delivery)
     expect(page).to have_content('Unshippable Items')
 
     click_button "Save and Continue"

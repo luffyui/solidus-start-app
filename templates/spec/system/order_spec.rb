@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.describe 'orders', type: :system do
   let(:order) { Spree::TestingSupport::OrderWalkthrough.up_to(:complete) }
@@ -50,7 +50,7 @@ RSpec.describe 'orders', type: :system do
   it "should return the correct title when displaying a completed order" do
     visit order_path(order)
 
-    within '#order_summary' do
+    within 'h1' do
       expect(page).to have_content("#{I18n.t('spree.order')} #{order.number}")
     end
   end

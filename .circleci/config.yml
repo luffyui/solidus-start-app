@@ -1,8 +1,10 @@
 version: 2.1
 
 orbs:
-  browser-tools: circleci/browser-tools@1.3.0
-  slack: circleci/slack@4.9.3
+
+  browser-tools: circleci/browser-tools@1.4.6
+  codecov: codecov/codecov@3.2.4
+
 
   # Always take the latest version of the orb, this allows us to
   # run specs against Solidus supported versions only without the need
@@ -10,125 +12,116 @@ orbs:
   # or goes EOL.
   solidusio_extensions: solidusio/extensions@volatile
 
-commands:
-  setup:
-    steps:
-      - browser-tools/install-chrome
-      - browser-tools/install-chromedriver
-      - checkout
-      - run:
-          name: Install libvips
-          command: sudo apt-get install -y libvips
-
-  test-branch:
-    description:
-      Runs tests for a specific Solidus branch.
-
-    parameters:
-      branch:
-        type: string
-        default: master
-      command:
-        type: string
-        default: |
-          cd sandbox
-          bundle add rspec_junit_formatter --group test
-          bundle exec rspec --format progress --format RspecJunitFormatter --out $TEST_RESULTS_PATH
-      command_verb:
-        type: string
-        default: Runs tests
-      rails_version:
-        type: string
-
-    steps:
-      - run:
-          name: 'Solidus <<parameters.branch>>:  Install gems'
-          command: |
-            bundle config --local path vendor/bundle/<<parameters.branch>>
-            bundle install
-            bundle clean
-          environment:
-            RAILS_VERSION: <<parameters.rails_version>>
-            SOLIDUS_BRANCH: <<parameters.branch>>
-          when: always
-      - run:
-          name: 'Solidus <<parameters.branch>>:  Install sandbox with generated starter frontend'
-          command: bin/sandbox --seed=false --sample=false
-          environment:
-            RAILS_ENV: development # if run in test mode will attempt to eager-load and break the sandbox
-            RAILS_VERSION: <<parameters.rails_version>>
-            SANDBOX_BUNDLE_PATH: ../vendor/bundle/<<parameters.branch>>
-            SOLIDUS_BRANCH: <<parameters.branch>>
-          when: always
-      - run:
-          name: '<<parameters.command_verb>> on Solidus <<parameters.branch>>'
-          command: <<parameters.command>>
-          environment:
-            RAILS_VERSION: <<parameters.rails_version>>
-            SOLIDUS_BRANCH: <<parameters.branch>>
-            TEST_RESULTS_PATH: ../test-results/gems-v3-ruby-v2-7-solidus-<<parameters.branch>>/results.xml
-          when: always
-      - run:
-          command: rm -rf sandbox
-          name: 'Solidus <<parameters.branch>>: Clean up'
-          when: always
-
-  notify:
-    steps:
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-          branch_pattern: main, v[0-9]+\.[0-9]+
-
 jobs:
   run-specs:
     executor:
         name: solidusio_extensions/<<parameters.database>>
         ruby_version: <<parameters.ruby_version>>
     steps:
-      - setup
-      - test-branch:
-          branch: <<parameters.solidus_branch>>
-          rails_version: <<parameters.rails_version>>
+      - checkout
+      - browser-tools/install-chrome
+      - browser-tools/install-chromedriver
+      - run:
+          name: Install libvips
+          command: |
+            sudo apt-get update
+            sudo apt-get install -yq libvips-dev
+      - run:
+          name: 'Solidus <<parameters.solidus_branch>>:  Install gems'
+          command: |
+            bundle install
+          environment:
+            RAILS_VERSION: <<parameters.rails_version>>
+            SOLIDUS_BRANCH: <<parameters.solidus_branch>>
+          when: always
+      - run:
+          name: 'Solidus <<parameters.solidus_branch>>:  Install sandbox with generated starter frontend'
+
+          command: |
+            <<#parameters.coverage>>export COVERAGE=true<</parameters.coverage>>
+            bin/sandbox --seed=false --sample=false
+          environment:
+            RAILS_ENV: development # if run in test mode will attempt to eager-load and break the sandbox
+            RAILS_VERSION: <<parameters.rails_version>>
+            SOLIDUS_BRANCH: <<parameters.solidus_branch>>
+          when: always
+      - run:
+          name: 'Runs tests on Solidus <<parameters.solidus_branch>>'
+          command: |
+            cd sandbox
+            bundle add rspec_junit_formatter --group test
+
+            <<#parameters.coverage>>export COVERAGE=true<</parameters.coverage>>
+            bundle exec rspec --format progress --format RspecJunitFormatter --out ../test-results/results.xml
+          environment:
+            RAILS_VERSION: <<parameters.rails_version>>
+            SOLIDUS_BRANCH: <<parameters.solidus_branch>>
+          when: always
+      - when:
+          condition: <<parameters.coverage>>
+          steps: ["codecov/upload"]
+          path: test-results
+      - store_artifacts:
+          path: /home/circleci/project/sandbox/tmp/capybara/
+          destination: capybara
+      - store_artifacts:
+          path: /home/circleci/project/coverage/
+          destination: coverage
+      - run:
+          command: rm -rf sandbox
+          name: 'Solidus <<parameters.solidus_branch>>: Clean up'
+          when: always
+
       - solidusio_extensions/store-test-results
       - notify
     parameters:
       solidus_branch:
         type: string
-        default: 'v3.2'
+        default: 'main'
       rails_version:
         type: string
-        default: '~> 7.0'
+        default: '~> 7.1.0'
       ruby_version:
         type: string
-        default: '3.1'
       database:
         type: string
-        default: 'postgres'
+
+
+      coverage:
+        type: boolean
+        default: false
 
 workflows:
-  "Run specs on supported Solidus versions":
+  "Run specs on development Solidus version":
     jobs:
       - run-specs:
-          context: slack-secrets
-          name: run-specs-but-with-rails-6
-          rails_version: '~> 6.1'
-          solidus_branch: 'v3.2'
+
+          name: run-specs-with-postgres-ruby-3-2
+          database: 'postgres'
+          ruby_version: '3.2'
 
       - run-specs:
-          context: slack-secrets
-          name: run-specs-but-with-ruby-3-0
+          name: run-specs-with-postgres-ruby-3-1
+          database: 'postgres'
+          ruby_version: '3.1'
+
+
+      - run-specs:
+          name: run-specs-with-postgres-ruby-3-0
+          database: 'postgres'
           ruby_version: '3.0'
-          solidus_branch: 'v3.2'
 
       - run-specs:
-          context: slack-secrets
-          name: run-specs-but-with-ruby-2
-          ruby_version: '2.7'
-          solidus_branch: 'v3.2'
 
-      - run-specs:
-          context: slack-secrets
-          name: run-specs-but-with-mysql
+          name: run-specs-with-mysql-ruby-3-2
           database: 'mysql'
-          solidus_branch: 'v3.2'
+          ruby_version: '3.2'
+
+      - run-specs:
+          name: run-specs-with-sqlite-ruby-3-2
+          database: 'sqlite'
+          ruby_version: '3.2'
+
+          coverage: true
+
+

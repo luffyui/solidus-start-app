@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.describe 'taxons', type: :system, caching: true do
   let!(:taxonomy) { create(:taxonomy) }
-  let!(:taxon) { create(:taxon, taxonomy: taxonomy, parent: taxonomy.root) }
+  let!(:taxon) { create(:taxon, taxonomy: taxonomy) }
 
   before do
     # Warm up the cache
@@ -19,9 +19,8 @@ RSpec.describe 'taxons', type: :system, caching: true do
     visit products_path
     # Cache rewrites:
     # - 2 x categories component
-    # - 1 x taxons list in search form
     # - 1 x categories in navigation
-    expect(cache_writes.count).to eq(4)
+    expect(cache_writes.count).to eq(3)
   end
 
   it "busts the cache when max_level_in_taxons_menu conf changes" do

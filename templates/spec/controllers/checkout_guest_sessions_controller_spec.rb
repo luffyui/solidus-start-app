@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'solidus_starter_frontend_helper'
+require 'solidus_starter_frontend_spec_helper'
 
 RSpec.describe CheckoutGuestSessionsController, type: :controller do
   let(:order) { create(:order_with_line_items, email: nil, user: nil, guest_token: token) }
@@ -22,9 +22,9 @@ RSpec.describe CheckoutGuestSessionsController, type: :controller do
       subject
     end
 
-    it 'redirects to the checkout_path after saving' do
+    it 'redirects to the edit_checkout_path after saving' do
       subject
-      expect(response).to redirect_to checkout_path
+      expect(response).to redirect_to edit_checkout_path
     end
 
     # Regression test for https://github.com/solidusio/solidus/issues/1588
@@ -48,7 +48,7 @@ RSpec.describe CheckoutGuestSessionsController, type: :controller do
         expect {
           subject
         }.not_to change { Spree::Address.count }
-        expect(response).to redirect_to checkout_path
+        expect(response).to redirect_to edit_checkout_path
       end
     end
 
