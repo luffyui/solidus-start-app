@@ -5,6 +5,7 @@ orbs:
   browser-tools: circleci/browser-tools@1.4.6
   codecov: codecov/codecov@3.2.4
 
+
   # Always take the latest version of the orb, this allows us to
   # run specs against Solidus supported versions only without the need
   # to change this configuration every time a Solidus version is released
@@ -70,7 +71,9 @@ jobs:
           command: rm -rf sandbox
           name: 'Solidus <<parameters.solidus_branch>>: Clean up'
           when: always
+
       - solidusio_extensions/store-test-results
+      - notify
     parameters:
       solidus_branch:
         type: string
@@ -92,6 +95,7 @@ workflows:
   "Run specs on development Solidus version":
     jobs:
       - run-specs:
+
           name: run-specs-with-postgres-ruby-3-2
           database: 'postgres'
           ruby_version: '3.2'
@@ -119,4 +123,5 @@ workflows:
           ruby_version: '3.2'
 
           coverage: true
+
 

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 set -e
+
 set -x
+
 
 replace_in_database_yml() {
   if [[ "$DB" == "postgresql" ]]; then
@@ -50,6 +52,7 @@ unbundled bundle install
 test -n "${host}" && replace_in_database_yml "host" "${host}"
 test -n "${username}" && replace_in_database_yml "username" "${username}"
 test -n "${password}" && replace_in_database_yml "password" "${password}"
+
 
 unbundled bundle add solidus \
   --github "${SOLIDUS_REPO:-solidusio/solidus}" \
